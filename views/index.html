@@ -1,0 +1,21 @@
+<!-- views/index.html -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Email Sync</title>
+  </head>
+  <body>
+    <h1>Email Synchronization</h1>
+    <a href="/auth/outlook">Connect with Outlook</a>
+    <div id="updates"></div>
+    <script>
+      const eventSource = new EventSource("/updates");
+      eventSource.onmessage = function (event) {
+        const data = JSON.parse(event.data);
+        document.getElementById(
+          "updates"
+        ).innerHTML += `<p>${data.message}</p>`;
+      };
+    </script>
+  </body>
+</html>
