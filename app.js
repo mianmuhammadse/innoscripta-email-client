@@ -1,16 +1,14 @@
 import express from "express";
 import session from "express-session";
 import axios from "axios";
-import querystring from "querystring";
-import { config } from "dotenv";
+import { Client } from "@elastic/elasticsearch";
 import * as msal from "@azure/msal-node";
 import syncEmails from "./sync.js";
 import { router as updates } from "./updates.js";
 import { router as outlookRouter } from "./routes/auth.js";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
-
-config();
+import config from "./configs.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,24 +16,11 @@ const __dirname = dirname(__filename);
 const app = express();
 app.locals.users = {};
 
-const msalConfig = {
-  auth: {
-    clientId: process.env.OAUTH_CLIENT_ID,
-    authority: process.env.OAUTH_AUTHORITY,
-    clientSecret: process.env.OAUTH_CLIENT_SECRET,
-  },
-  system: {
-    loggerOptions: {
-      loggerCallback(loglevel, message, containsPii) {
-        if (!containsPii) console.log(message);
-      },
-      piiLoggingEnabled: false,
-      logLevel: msal.LogLevel.Verbose,
-    },
-  },
-};
+app.locals.msalClient = new msal.ConfidentialClientApplication(
+  config.msalConfig
+);
 
-app.locals.msalClient = new msal.ConfidentialClientApplication(msalConfig);
+app.locals.esClient = new Client(config.elasticConfig);
 
 app.use(express.json());
 app.use(

@@ -60,7 +60,7 @@ async function readEmails(msalClient, userId) {
   const client = getAuthenticatedClient(msalClient, userId);
   const messages = await client
     .api("/me/mailFolders/inbox/messages")
-    .select("subject, from, receivedDateTime")
+    .select("subject, from")
     .top(10)
     .get();
   return messages;
