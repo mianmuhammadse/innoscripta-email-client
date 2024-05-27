@@ -3,12 +3,12 @@ import session from "express-session";
 import axios from "axios";
 import { Client } from "@elastic/elasticsearch";
 import * as msal from "@azure/msal-node";
-import syncEmails from "./sync.js";
 import { router as updates } from "./updates.js";
 import { router as outlookRouter } from "./routes/auth.js";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 import config from "./configs.js";
+import { syncEmails } from "./graph.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -33,29 +33,13 @@ app.use(
 
 app.use(outlookRouter);
 
-app.get("/sync", async (req, res) => {
-  const accessToken = req.session.accessToken;
-  const idToken = req.session.idToken;
-  console.log("ACCESS_TOKEN::", accessToken);
-
-  if (!accessToken) {
-    return res.status(401).send("Not authenticated");
-  }
-
+app.get("/sync-emails", async (req, res) => {
   try {
-    const userInfo = await axios.get("https://graph.microsoft.com/v1.0/me", {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
-
-    const userId = userInfo.data.id;
-
-    // Sync emails
-    await syncEmails(accessToken, userId);
-
-    res.send("Emails are being synchronized");
+    res
+      .status(200)
+      .json({ message: "Oauth successful andEmails sync started" });
   } catch (error) {
-    console.error("Error syncing emails:", error);
-    res.status(500).send("Error during email synchronization");
+    res.status(500).send("Error syncing emails");
   }
 });
 
