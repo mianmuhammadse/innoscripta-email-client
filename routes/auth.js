@@ -1,8 +1,10 @@
-import express from "express";
+import { getUserDetails } from "../graph.js";
+import { syncEmailJob } from "../jobs/emailSync.js";
 import { hash, compare } from "bcrypt";
+import express from "express";
 import jwt from "jsonwebtoken";
+import cron from "node-cron";
 
-import { getUserDetails, readEmails } from "../graph.js";
 const router = express.Router();
 
 router.post("/signup", async (req, res) => {
@@ -151,6 +153,7 @@ router.get("/callback", async (req, res) => {
     );
 
     req.session.userId = tokenResponse.account.homeAccountId;
+    req.session.accessToken = tokenResponse.accessToken;
     const user = await getUserDetails(
       req.app.locals.msalClient,
       req.session.userId
@@ -179,14 +182,16 @@ router.get("/callback", async (req, res) => {
         },
       });
 
-      const emails = await readEmails(
+      const createSyncEmailJob = syncEmailJob(
         req.app.locals.msalClient,
         req.session.userId
       );
 
+      cron.schedule("*/0.5 * * * *", createSyncEmailJob);
+
       // Redirect to a page to start syncing emails
-      // res.redirect("/sync");
-      res.status(200).send({ message: "ms oauth successful", emails });
+      res.redirect("/sync-emails");
+      // res.status(200).send({ message: "ms oauth successful", emails });
     } else {
       // Index exists, check the user
       const body = await esClient.search({
@@ -199,18 +204,18 @@ router.get("/callback", async (req, res) => {
       });
 
       if (body && body.hits.total.value > 0) {
-        const emails = await readEmails(
+        const createSyncEmailJob = syncEmailJob(
           req.app.locals.msalClient,
           req.session.userId
         );
 
-        return res.status(200).send({
-          message: `ms oauth successful`,
-          emails,
-        });
+        cron.schedule("*/0.5 * * * *", createSyncEmailJob);
+
+        res.redirect("/sync-emails");
       }
     }
   } catch (error) {
+    console.log("##ERROR##", error);
     console.error("Error completing authentication", JSON.stringify(error));
     res.status(500).send("Error during authentication");
   }

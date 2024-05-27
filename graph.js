@@ -1,4 +1,11 @@
 import { Client } from "@microsoft/microsoft-graph-client";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+import path from "path";
+import { writeFileSync, existsSync, readFileSync } from "fs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 function getAuthenticatedClient(msalClient, userId) {
   if (!msalClient || !userId) {
@@ -53,17 +60,84 @@ async function getUserDetails(msalClient, userId) {
     .api("/me")
     .select("displayName,mail,mailboxSettings,userPrincipalName")
     .get();
+
   return user;
 }
 
-async function readEmails(msalClient, userId) {
-  const client = getAuthenticatedClient(msalClient, userId);
-  const messages = await client
-    .api("/me/mailFolders/inbox/messages")
-    .select("subject, from")
-    .top(10)
-    .get();
-  return messages;
+async function loadExistingEmails() {
+  const filePath = path.join(__dirname, "emails.json");
+  if (existsSync(filePath)) {
+    const data = JSON.parse(readFileSync(filePath));
+    return data;
+  }
+  return { emails: [], deltaLink: null };
 }
 
-export { getUserDetails, readEmails };
+async function saveEmailsAndDeltaLocally(emails, deltaLink) {
+  const filePath = path.join(__dirname, "emails.json");
+  const data = {
+    emails,
+    deltaLink,
+  };
+
+  try {
+    writeFileSync(filePath, JSON.stringify(data, null, 2));
+    console.log("Emails and delta link saved locally");
+  } catch (error) {
+    console.error("Error saving emails and delta link:", error);
+    throw error;
+  }
+}
+
+const syncEmails = async (msalClient, userId) => {
+  const client = getAuthenticatedClient(msalClient, userId);
+
+  const existingData = await loadExistingEmails();
+  const existingEmails = existingData.emails;
+  const deltaLink = existingData.deltaLink;
+
+  try {
+    const { emails: newEmails, newDeltaLink } = await getOutlookEmailsWithDelta(
+      client,
+      deltaLink
+    );
+    const updatedEmails = [...existingEmails, ...newEmails];
+    saveEmailsAndDeltaLocally(updatedEmails, newDeltaLink);
+  } catch (error) {
+    console.error("Error syncing emails:", error);
+  }
+};
+
+async function getOutlookEmailsWithDelta(client, deltaLink = null) {
+  try {
+    let response;
+    if (deltaLink) {
+      response = await client
+        .api(deltaLink)
+        .select("subject, from, isRead, flag")
+        .get();
+    } else {
+      response = await client
+        .api("/me/mailFolders/inbox/messages/delta")
+        .select("subject, from, isRead, flag")
+        .get();
+    }
+
+    const emails = response.value;
+    const newDeltaLink =
+      response["@odata.deltaLink"] || response["@odata.nextLink"];
+
+    return { emails, newDeltaLink };
+  } catch (error) {
+    console.error("Error fetching emails with delta:", error);
+    throw error;
+  }
+}
+
+export {
+  getAuthenticatedClient,
+  getUserDetails,
+  saveEmailsAndDeltaLocally,
+  syncEmails,
+  getOutlookEmailsWithDelta,
+};
